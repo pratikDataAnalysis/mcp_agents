@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "notionApi": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@notionhq/notion-mcp-server"],
+      "env": {
+        "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer ${NOTION_MCP_ACCESS_TOKEN}\", \"Notion-Version\": \"2022-06-28\"}"
+      }
+    },
+    "zoom": {
+      "command": "npx",
+      "args": [
+        "-y", "@prathamesh0901/zoom-mcp-server"
+      ],
+      "env": {
+        "ZOOM_ACCOUNT_ID": "5MyoLBoHTUeX8rqTbneiCA",
+        "ZOOM_CLIENT_ID": "c5ZNXs0JT0Cqj4mxiKaTg",
+        "ZOOM_CLIENT_SECRET": "nrXCl1aPTC9RYUqEU68KNCbQVvzK0Q7e"
+      }
+    }
+  }
+}

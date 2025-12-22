@@ -1,0 +1,32 @@
+.env
+
+# Ignore test reports
+test_reports/
+
+__pycache__/
+*.pyc
+
+.DS_Store
+.vscode/
+.idea/
+node_modules/
+logs/
+*.log
+*.sqlite3
+
+.venv/
+.env.local
+
+test_reports
+
+docs
+.env
+
+# =========================
+# Build / cache
+# =========================
+dist/
+build/
+.cache/
+
+*.ipynb

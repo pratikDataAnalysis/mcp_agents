@@ -1,0 +1,43 @@
+# -----------------------------
+# Web framework & server
+# -----------------------------
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# -----------------------------
+# Twilio (WhatsApp integration)
+# -----------------------------
+twilio==9.3.7
+
+# -----------------------------
+# LangChain + LangGraph
+# -----------------------------
+langchain==1.0.2
+langgraph==1.0.5
+
+# MCP adapters for LangChain
+langchain-mcp-adapters==0.2.1
+langgraph_supervisor==0.0.31
+
+# For LLMs
+langchain-openai==1.1.4
+langchain-ollama==1.0.1
+
+# -----------------------------
+# Configuration & validation
+# -----------------------------
+pydantic==2.10.2
+pydantic-settings==2.6.1
+
+# -----------------------------
+# Async utilities (indirect but useful)
+# -----------------------------
+anyio>=4.4.0
+
+# -----------------------------
+# Testing
+# -----------------------------
+pytest==8.3.3
+
+# Redis
+redis==7.1.0
