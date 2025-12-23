@@ -4,7 +4,8 @@ Output assembly helpers.
 Responsibilities:
 - Convert Supervisor results (various shapes) into a stable reply_text string
 - Never leak internal tool-transfer / routing messages to end users
-- Prefer supervisor final message (Option B)
+- Prefer structured supervisor output (Phase 5)
+- Prefer supervisor final message (Option B) as fallback
 """
 
 from __future__ import annotations
@@ -54,6 +55,31 @@ def _content(msg: BaseMessage) -> str:
     return (getattr(msg, "content", "") or "").strip()
 
 
+def _extract_structured_reply_text(structured: Any) -> Optional[str]:
+    """
+    Extract reply_text from supervisor structured_response.
+
+    Supports:
+    - Pydantic model (attribute access)
+    - dict (key access)
+    """
+    if structured is None:
+        return None
+
+    # Pydantic object or typed object
+    rt = getattr(structured, "reply_text", None)
+    if isinstance(rt, str) and rt.strip():
+        return rt.strip()
+
+    # Dict-like
+    if isinstance(structured, dict):
+        rt2 = structured.get("reply_text")
+        if isinstance(rt2, str) and rt2.strip():
+            return rt2.strip()
+
+    return None
+
+
 def _pick_last_supervisor_answer(messages: list[BaseMessage]) -> Optional[str]:
     """
     Option B: prefer the last non-empty supervisor AIMessage content.
@@ -87,6 +113,7 @@ def extract_reply_text(result: Any) -> str:
     Best-effort extraction of a user-facing reply text from LangChain/LangGraph results.
 
     Priority:
+    0) Structured supervisor output: state['structured_response'].reply_text (Phase 5)
     1) Supervisor final answer (Option B)
     2) Fallback to last non-internal AI message
     3) Otherwise empty string
@@ -106,6 +133,13 @@ def extract_reply_text(result: Any) -> str:
 
     # Dict-like state (LangGraph often returns dict state)
     if isinstance(result, dict):
+        # Phase 5: Prefer structured supervisor output if present
+        sr = result.get("structured_response")
+        sr_text = _extract_structured_reply_text(sr)
+        if sr_text:
+            logger.debug("Reply selected | source=structured_response")
+            return sr_text
+
         out = result.get("output")
         if isinstance(out, str) and out.strip():
             return out.strip()

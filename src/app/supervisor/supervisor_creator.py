@@ -20,8 +20,23 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from src.app.logging.logger import setup_logger
 from src.app.supervisor.prompts.supervisor_prompt import SUPERVISOR_PROMPT
 from src.app.supervisor.tools import get_current_datetime
+from src.app.supervisor.structured_response import SupervisorStructuredReply
+from typing import TypedDict, List
+from langchain_core.messages import BaseMessage
 
 logger = setup_logger(__name__)
+
+class SupervisorState(TypedDict, total=False):
+    """
+    Minimal state schema required for langgraph-supervisor structured output.
+
+    Why:
+    - response_format writes into state["structured_response"]
+    - langgraph-supervisor requires that key to exist in the schema
+    """
+    messages: List[BaseMessage]
+    structured_response: dict
+    remaining_steps: int
 
 
 class SupervisorCreator:
@@ -69,7 +84,8 @@ class SupervisorCreator:
             model=self.model,
             prompt=prompt,
             tools=[get_current_datetime],
-            output_mode="last_message",
+            output_mode="full_history",
+            response_format=SupervisorStructuredReply
         ).compile()
 
         logger.info("Supervisor compiled successfully")
