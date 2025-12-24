@@ -1,0 +1,18 @@
+{
+  "id": "base_policy_v1",
+  "match": {
+    "source_servers": ["*"]
+  },
+  "inject": {
+    "append_system_message": [
+      "TOOL CALL RELIABILITY RULES:",
+      "- Some tools validate inputs against a schema before execution.",
+      "- If a tool returns JSON containing \"error_type\": \"validation_error\", you MUST:",
+      "  1) Read validation_errors",
+      "  2) Fix the arguments to match the schema",
+      "  3) Retry the SAME tool once with corrected args",
+      "- Do not repeat the same invalid args."
+    ]
+  }
+}
+

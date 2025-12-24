@@ -30,3 +30,8 @@ build/
 .cache/
 
 *.ipynb
+.ipynb_checkpoints/
+*.sha256
+
+# Redis
+*.rdb

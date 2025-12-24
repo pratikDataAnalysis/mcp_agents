@@ -20,6 +20,7 @@ import asyncio
 import json
 import uuid
 import time
+from collections import defaultdict
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Dict, List, Tuple, Optional
@@ -27,9 +28,10 @@ from typing import Any, Dict, List, Tuple, Optional
 from src.app.config.settings import settings
 from src.app.infra.redis_client import RedisClient
 from src.app.infra.redis_stream_outbound_publisher import RedisStreamOutboundPublisher
+from src.app.infra.tool_validation import wrap_tool_with_validation
 from src.app.logging.logger import setup_logger
 from src.app.mcp.mcp_client import MCPClient
-from src.app.agents.agent_definitions import create_agent_definitions_from_source
+from src.app.agents.agent_definitions import create_agent_definitions_from_source, create_agent_definitions_with_llm, AgentDefinitions
 from src.app.agents.agent_creator import AgentCreator
 from src.app.runtime.output_assembler import extract_reply_text
 from src.app.supervisor.supervisor_creator import SupervisorCreator
@@ -93,13 +95,23 @@ async def load_mcp_tools(mcp_client: MCPClient):
 
     flat_tools: List[Any] = []
     tagged_tools: List[Any] = []
+    tools_with_schema = 0
+    tools_without_schema = 0
 
     for server_name, tools in all_tools.items():
         for tool in tools:
-            flat_tools.append(tool)
+            # Wrap tool so args are validated against args_schema before execution.
+            wrapped_tool = wrap_tool_with_validation(tool)
+            flat_tools.append(wrapped_tool)
+
+            if getattr(tool, "args_schema", None) is not None:
+                tools_with_schema += 1
+            else:
+                tools_without_schema += 1
+
             tagged_tools.append(
                 SimpleNamespace(
-                    tool=tool,
+                    tool=wrapped_tool,
                     source_server=server_name,
                     name=getattr(tool, "name", ""),
                     description=getattr(tool, "description", ""),
@@ -108,26 +120,53 @@ async def load_mcp_tools(mcp_client: MCPClient):
             )
 
     logger.info("MCP tools loaded | servers=%s | tools=%s", len(all_tools), len(tagged_tools))
+    logger.info(
+        "Tool schemas | with_args_schema=%s | without_args_schema=%s",
+        tools_with_schema,
+        tools_without_schema,
+    )
     for t in tagged_tools:
         logger.debug("Tool | server=%s | name=%s | description=%s", t.source_server, t.name, t.description)
 
     return flat_tools, tagged_tools
 
-def build_agent_definitions(tagged_tools: List[Any]) -> Any:
+def build_agent_definitions(flat_tools: List[Any], tagged_tools: List[Any], llm: Any) -> Any:
     """
-    Create agent definitions from tagged tools + agent_config.json mapping.
+    Create agent definitions using LLM-based categorization.
+    
+    Groups tools by source_server first, then uses LLM to categorize tools within each server
+    into specialized agents.
     """
     if not tagged_tools:
         logger.warning("No tagged tools available; agent definitions will be empty")
         return None
+    
+    # Group tools by source_server
+    tools_by_server = defaultdict(list)
 
-    agent_defs = create_agent_definitions_from_source(tagged_tools)
-    logger.info("Agent definitions created | count=%s", len(agent_defs.agents) if agent_defs else 0)
-
-    if agent_defs:
-        for a in agent_defs.agents:
-            logger.debug("AgentDef | name=%s | tools=%s", a.name, len(a.tools))
-
+    for tagged in tagged_tools:
+        tools_by_server[tagged.source_server].append(tagged.name)
+    
+    # Create agent definitions for each server using LLM
+    all_agent_defs = []
+    for server_name, tool_names in tools_by_server.items():
+        # Get tagged_tools for this server (they already have name and description)
+        server_tagged_tools = [tagged for tagged in tagged_tools if tagged.source_server == server_name]
+        
+        if not server_tagged_tools:
+            logger.warning("No tools found for server | server=%s", server_name)
+            continue
+        
+        # Use LLM to categorize tools for this server
+        server_agent_defs = create_agent_definitions_with_llm(server_tagged_tools, llm, tools_by_server)
+        all_agent_defs.extend(server_agent_defs.agents)
+    
+    agent_defs = AgentDefinitions(agents=all_agent_defs)
+    logger.info("Agent definitions created | count=%s", len(agent_defs.agents))
+    
+    for a in agent_defs.agents:
+        logger.debug("AgentDef | name=%s | server=%s | tools=%s", a.name, a.source_server, len(a.tools))
+    
     return agent_defs
 
 def build_agents(agent_defs: Any, flat_tools: List[Any]) -> Dict[str, Any]:
@@ -148,7 +187,6 @@ def build_agents(agent_defs: Any, flat_tools: List[Any]) -> Dict[str, Any]:
 
     logger.info("Agents created | count=%s", len(agents))
     return agents
-
 
 def build_supervisor(llm: Any, agents: Dict[str, Any], agent_defs: Any) -> Any:
     """
@@ -183,7 +221,7 @@ async def bootstrap_supervisor() -> Any:
     logger.info("Bootstrap check | tools=%s", len(tagged_tools))
 
     # Step 3: Agent definitions
-    agent_defs = build_agent_definitions(tagged_tools)
+    agent_defs = build_agent_definitions(flat_tools, tagged_tools, llm)
 
     # Step 4: Agents
     agents = build_agents(agent_defs, flat_tools)
@@ -366,7 +404,7 @@ class RedisStreamWorker:
                 (t_sup_end - t_sup_start),
             )
 
-            logger.info("Supervisor result | id=%s | result=%s", message_id, result)
+            logger.debug("Supervisor result | id=%s | result=%s", message_id, result)
 
             # --- Output extraction timing ---
             t_extract_start = time.perf_counter()
