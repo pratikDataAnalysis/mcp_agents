@@ -41,3 +41,6 @@ pytest==8.3.3
 
 # Redis
 redis==7.1.0
+
+# SSL CA bundle for urllib on some systems (macOS/Homebrew Python)
+certifi==2025.8.3

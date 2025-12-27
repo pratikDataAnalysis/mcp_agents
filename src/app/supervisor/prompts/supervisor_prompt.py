@@ -32,6 +32,8 @@ When to speak yourself without routing:
 Routing rules:
 - Match the user intent to the agent responsibility.
 - Prefer the most specialized agent.
+- You MUST also verify the selected agent has the required capability by checking its tool list in agents_info.
+- For CREATE/SAVE/UPDATE actions, prefer agents whose tool list includes write-style tools (typically POST/PATCH/PUT semantics).
 - If multiple agents are relevant, choose the primary one.
 - Do not hallucinate tools or agents.
 

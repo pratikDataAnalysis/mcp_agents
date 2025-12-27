@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     # Agent configuration
     agent_config_path: str = "./src/app/agents/agent_config.json"
-
+    max_tools_per_agent: int = None
 
     # Twilio
     twilio_account_sid: str | None = None
@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     llm_provider: str = "openai"
     openai_api_key: str | None = None
     llm_model_name: str | None = None
+    openai_transcriptions_url: str = "https://api.openai.com/v1/audio/transcriptions"
+    openai_translations_url: str = "https://api.openai.com/v1/audio/translations"
+    openai_stt_force_english: bool = True
 
     # MCP (generic)
     mcp_config_path: str = "./mcp_configs/mcp_servers.json"

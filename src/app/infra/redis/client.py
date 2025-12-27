@@ -68,3 +68,4 @@ class RedisClient:
         if not self._client:
             await self.connect()
         return self._client
+

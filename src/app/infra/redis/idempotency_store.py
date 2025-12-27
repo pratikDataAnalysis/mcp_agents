@@ -8,9 +8,9 @@ Responsibilities:
 
 from __future__ import annotations
 
-from src.app.infra.redis_client import RedisClient
-from src.app.logging.logger import setup_logger
 from src.app.config.settings import settings
+from src.app.infra.redis.client import RedisClient
+from src.app.logging.logger import setup_logger
 
 logger = setup_logger(__name__)
 
@@ -31,3 +31,4 @@ class IdempotencyStore:
     async def mark_sent(self, out_id: str) -> None:
         client = await self.redis_client.get_client()
         await client.set(self._key(out_id), "1", ex=settings.outbound_idempotency_ttl_seconds)
+

@@ -98,7 +98,13 @@ class SupervisorCreator:
         if not agent_definitions or not getattr(agent_definitions, "agents", None):
             raise ValueError("Agent definitions missing for supervisor prompt")
 
-        agents_info =  "\n".join([f"- {agent.name.lower()}: {agent.responsibility}" for agent in agent_definitions.agents])
+        # Include tool list so the supervisor can route based on actual capabilities
+        agents_info = "\n".join(
+            [
+                f"- {agent.name.lower()}: {agent.responsibility} | tools={', '.join(agent.tools)}"
+                for agent in agent_definitions.agents
+            ]
+        )
         rendered_prompt = SUPERVISOR_PROMPT.format(
             agents_info=agents_info
         )

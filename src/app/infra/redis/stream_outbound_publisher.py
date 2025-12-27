@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Dict
 
-from src.app.infra.redis_client import RedisClient
+from src.app.infra.redis.client import RedisClient
 from src.app.logging.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -58,3 +58,4 @@ class RedisStreamOutboundPublisher:
         )
 
         return stream_id
+

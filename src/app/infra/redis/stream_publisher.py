@@ -1,5 +1,5 @@
 """
-Redis Stream publisher.
+Redis Stream publisher (inbound).
 
 Responsibilities:
 - Publish inbound user messages to a Redis Stream
@@ -13,12 +13,12 @@ NOTE:
 
 from __future__ import annotations
 
-import uuid
 import json
+import uuid
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any, Dict
 
-from src.app.infra.redis_client import RedisClient
+from src.app.infra.redis.client import RedisClient
 from src.app.logging.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -65,6 +65,7 @@ class RedisStreamPublisher:
         if metadata:
             # Store metadata as JSON string (stable, parseable)
             payload["metadata"] = json.dumps(metadata)
+
         logger.info(
             "Publishing message to Redis Stream | stream=%s | message_id=%s | source=%s",
             self.stream_name,
@@ -78,10 +79,7 @@ class RedisStreamPublisher:
                 fields=payload,
             )
         except Exception as exc:
-            logger.error(
-                "Failed to publish message to Redis Stream",
-                exc_info=exc,
-            )
+            logger.error("Failed to publish message to Redis Stream", exc_info=exc)
             raise
 
         logger.debug(
@@ -92,3 +90,4 @@ class RedisStreamPublisher:
         )
 
         return stream_id
+

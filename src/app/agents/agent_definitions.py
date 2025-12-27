@@ -274,7 +274,7 @@ def create_agent_definitions_with_llm(tagged_tools: List[Any], llm: Any, tools_b
     NOTE: this function is only used when LLM fails to categorize tools and act as a fallback.
     ** Using this free us from updating agent_config.json to have all the tools and their source_server. **
     """
-    logger.info("Creating agent definitions with LLM | tools=%s", len(tagged_tools))
+    logger.info("Creating agent definitions with LLM | tools=%s | max_tools_per_agent=%s", len(tagged_tools), settings.max_tools_per_agent)
     
     if not tagged_tools:
         logger.warning("No tools provided for LLM categorization")
@@ -306,6 +306,7 @@ def create_agent_definitions_with_llm(tagged_tools: List[Any], llm: Any, tools_b
     prompt = AGENT_CATEGORIZATION_PROMPT.format(
         tool_count=len(tool_info),
         tool_info=tool_info_str,
+        max_tools_per_agent=settings.max_tools_per_agent,
     )
     
     try:

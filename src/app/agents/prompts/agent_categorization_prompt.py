@@ -1,7 +1,7 @@
 from langchain_core.prompts import PromptTemplate
 
 AGENT_CATEGORIZATION_PROMPT = PromptTemplate(
-    input_variables=["tool_count", "tool_info"],
+    input_variables=["tool_count", "tool_info", "max_tools_per_agent"],
     template="""
 You are an expert in designing multi-agent systems. I have a collection of {tool_count} tools from MCP servers that I want to organize into logical agent groups.
 
@@ -9,9 +9,11 @@ Each tool has a name, description, source_server it belongs to, and may include 
 Here are the available tools:
 {tool_info}
 
-IMPORTANT: I want you to analyze these tools and group them into logical specialized agents based on related functionality and purpose. 
-Focus on creating broader categories that group related functionality together.
-Each group should be a single agent, make sure no agent to have more than 5 tools at maximum, if it has more than 5 tools, you need to create more agents.
+IMPORTANT: You MUST group these tools into specialized agents based on functionality and purpose.
+HARD CONSTRAINTS:
+- Each tool MUST be assigned to exactly ONE agent (no omissions, no duplicates).
+- NO TOOL MAY BE LEFT UNASSIGNED for any reason.
+- Each agent MUST have at most {max_tools_per_agent} tools. If adding a tool would exceed this limit, you MUST create another agent.
 
 CRITICAL RELIABILITY REQUIREMENT:
 - Tool calls can fail due to invalid argument shapes (schema/validation errors).
@@ -30,5 +32,10 @@ For each agent, provide:
 The goal is to create specialized agents that each handle a specific domain of operations, rather than having one agent with too many tools that might get confused.
 
 Make sure every tool is assigned to exactly one agent, and the groupings are logical based on related functionality.
+
+IMPORTANT ROUTING SUPPORT:
+- Your grouping must make routing unambiguous.
+- For "save/create note/page" style user requests, ensure there is an obvious "pages/notes" agent that contains the create/write tool(s) needed for page creation.
+- For "search/find" style user requests, ensure there is an obvious agent that contains the search/read tool(s).
 """.strip(),
 )

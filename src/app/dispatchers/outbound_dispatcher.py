@@ -18,8 +18,7 @@ import asyncio
 from typing import Dict
 
 from src.app.config.settings import settings
-from src.app.infra.redis_client import RedisClient
-from src.app.infra.idempotency_store import IdempotencyStore
+from src.app.infra.redis import RedisClient, IdempotencyStore
 from src.app.logging.logger import setup_logger
 from src.app.dispatchers.channels.twilio_whatsapp_sender import TwilioWhatsAppSender
 

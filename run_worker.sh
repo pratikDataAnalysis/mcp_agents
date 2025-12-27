@@ -16,9 +16,9 @@ log() {
 # ------------------------------------------------------------
 # Guard: Prevent multiple Redis Stream workers
 # ------------------------------------------------------------
-if pgrep -f "src.app.infra.redis_stream_worker" > /dev/null; then
-  echo "[run_worker.sh] ERROR: redis_stream_worker already running."
-  echo "[run_worker.sh] Use: pkill -f src.app.infra.redis_stream_worker"
+if pgrep -f "src.app.infra.redis.worker" > /dev/null; then
+  echo "[run_worker.sh] ERROR: redis worker already running."
+  echo "[run_worker.sh] Use: pkill -f src.app.infra.redis.worker"
   exit 1
 fi
 
@@ -99,4 +99,4 @@ fi
 
 # 8) Start Redis worker (long-running)
 log "Starting Redis Stream worker"
-python -m src.app.infra.redis_stream_worker
+python -m src.app.infra.redis.worker
