@@ -8,7 +8,6 @@ class Settings(BaseSettings):
     base_url: str = "http://localhost:8000"
 
     # Agent configuration
-    agent_config_path: str = "./src/app/agents/agent_config.json"
     max_tools_per_agent: int = None
 
     # Twilio
@@ -25,7 +24,14 @@ class Settings(BaseSettings):
     llm_model_name: str | None = None
     openai_transcriptions_url: str = "https://api.openai.com/v1/audio/transcriptions"
     openai_translations_url: str = "https://api.openai.com/v1/audio/translations"
+    openai_tts_url: str = "https://api.openai.com/v1/audio/speech"
     openai_stt_force_english: bool = True
+
+    # Audio / TTS defaults
+    # Default to the most compatible OpenAI TTS model name; can be overridden via .env
+    tts_model_name: str = "tts-1"
+    tts_voice: str = "alloy"
+    tts_format: str = "mp3"
 
     # MCP (generic)
     mcp_config_path: str = "./mcp_configs/mcp_servers.json"

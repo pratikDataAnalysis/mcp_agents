@@ -8,8 +8,10 @@ Each wrapped tool is expected to have:
 
 It then:
 - Groups tools by source_server
-- Creates one AgentDefinition per source_server
-- Pulls responsibility + system_message from agent_config.json (keyed by source_server)
+- Creates AgentDefinitions for use by the supervisor runtime.
+
+Note:
+- Agent definitions are now generated via LLM-based tool categorization plus policy packs.
 """
 
 from __future__ import annotations
@@ -18,7 +20,6 @@ import json
 import os
 import re
 
-from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -116,9 +117,9 @@ class AgentDefinition(BaseModel):
       Stable agent identifier (snake_case recommended).
       Derived from source_server.
     responsibility:
-      Sourced from agent_config.json (or safe default).
+      Responsibility text for the agent.
     system_message:
-      Sourced from agent_config.json (or safe default).
+      System message for the agent.
     tools:
       List of tool names this agent will have access to.
     source_server:
@@ -144,114 +145,99 @@ def _normalize_agent_name(source_server: str) -> str:
     return source_server.replace(" ", "_").replace("-", "_").lower()
 
 
-def _load_agent_config(agent_config_path: str) -> Dict[str, Dict[str, str]]:
+def _tool_info_for_prompt(tagged_tools: List[Any]) -> List[Dict[str, Any]]:
     """
-    Load agent config JSON.
-
-    Expected format:
-    {
-      "agents": {
-        "notionApi": {
-          "responsibility": "...",
-          "system_message": "..."
-        }
-      }
-    }
-
-    IMPORTANT:
-    - Keys under "agents" MUST match source_server values exactly.
-      Example: source_server="notionApi" -> config key must be "notionApi"
+    Convert tagged tools into prompt-ready dicts, including args_schema JSON when available.
     """
-    path = Path(agent_config_path)
+    tool_info: List[Dict[str, Any]] = []
+    for tagged in tagged_tools:
+        schema_obj = getattr(tagged, "args_schema", None)
+        schema_json = None
+        try:
+            if isinstance(schema_obj, type) and issubclass(schema_obj, BaseModel):
+                schema_json = schema_obj.model_json_schema()
+        except Exception:
+            schema_json = None
 
-    if not path.exists():
-        logger.warning("Agent config not found | path=%s (defaults will be used)", agent_config_path)
-        return {}
-
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        logger.exception("Failed to read agent config JSON | path=%s", agent_config_path)
-        return {}
-
-    agents = raw.get("agents")
-    if not isinstance(agents, dict):
-        logger.warning("Invalid agent config format: missing 'agents' object | path=%s", agent_config_path)
-        return {}
-
-    logger.debug("Agent config loaded | path=%s | agents=%s | keys=%s", agent_config_path, len(agents), list(agents.keys()))
-    return agents
-
-
-def create_agent_definitions_from_source(wrapped_tools: List[Any]) -> AgentDefinitions:
-    """
-
-    DEPRECATED: this function is deprecated and will be removed in the future.
-    Use create_agent_definitions_with_llm instead.
-    thiss is only used when LLM fails to categorize tools and act as a fallback.
-    Using this mean updating agent_config.json to have all the tools and their source_server.
-
-    Build AgentDefinitions by grouping tools by their source_server.
-
-    Input:
-      wrapped_tools: List of tool wrappers/namespaces that include:
-        - .name
-        - .source_server
-
-    Output:
-      AgentDefinitions(agents=[...])
-
-    Behavior:
-    - One agent per source_server
-    - Tools assigned to that agent are the tools from that server
-    - responsibility/system_message pulled from agent_config.json using source_server key
-    - If config missing for a server, safe defaults are used
-    """
-    logger.info("Creating agent definitions with LLM failed, falling back to source-based grouping")
-    logger.info("Creating agent definitions from tool sources | tools=%s", len(wrapped_tools))
-
-    agent_cfg_map = _load_agent_config(settings.agent_config_path)
-
-    # 1. Group wrapped tools by server
-    tools_by_server = defaultdict(list)
-    for wrapped in wrapped_tools:
-        tools_by_server[wrapped.source_server].append(wrapped)
-
-    agent_defs = []
-    for server_name, tools in tools_by_server.items():
-        cfg = agent_cfg_map.get(server_name, {})
-        if not cfg:
-            logger.warning("No agent config found for server | server=%s (using defaults)", server_name)
-            cfg = {
-                "responsibility": f"Handle operations for server '{server_name}'.",
-                "system_message": (
-                    f"You operate as the {server_name} agent. "
-                    f"You handle requests using these tools: {', '.join(tool_names)}. "
-                    "Use only the listed capabilities and ask for clarification if a request is outside them."
-                )
+        tool_info.append(
+            {
+                "name": tagged.name,
+                "description": tagged.description or "",
+                "source_server": tagged.source_server or "",
+                "args_schema": schema_json,
             }
-
-        # 2. Render system message placeholders
-        system_message = _render_placeholders(cfg.get("system_message"))
-
-        agent_name = _normalize_agent_name(server_name)
-        tool_names = [t.name for t in tools]
-
-        agent_defs.append(
-            AgentDefinition(
-                name=agent_name,
-                responsibility=cfg.get("responsibility"),
-                system_message=system_message,
-                tools=tool_names,
-                source_server=server_name,
-            )
         )
-    
-    # 3. Return AgentDefinitions (not raw list)
-    return AgentDefinitions(agents=agent_defs)
+    return tool_info
 
 
-def create_agent_definitions_with_llm(tagged_tools: List[Any], llm: Any, tools_by_server: Dict[str, List[str]]) -> AgentDefinitions:
+def _server_rules_for_prompt(source_server: str, server_cfg: Optional[Dict[str, Any]]) -> str:
+    """
+    Build a server-scoped rules payload for the LLM prompt.
+
+    Keep this concise and deterministic. If server_cfg is missing, return empty string.
+    """
+    if not isinstance(server_cfg, dict) or not server_cfg:
+        return ""
+
+    desired_agents = server_cfg.get("agents")
+
+    rules_payload = {
+        "source_server": source_server,
+        "desired_agents": desired_agents,
+    }
+    return json.dumps(rules_payload, indent=2)
+
+
+def _invoke_llm_for_agent_defs(llm: Any, prompt: str) -> AgentDefinitions:
+    """
+    Invoke the LLM using structured output and return AgentDefinitions.
+    """
+    structured_llm = llm.with_structured_output(AgentDefinitions)
+    return structured_llm.invoke(prompt)
+
+
+def _apply_postprocessing(
+    *,
+    response: AgentDefinitions,
+    source_server: str,
+    tagged_tools: List[Any],
+) -> AgentDefinitions:
+    """
+    Normalize output, apply policy packs, and ensure tool coverage.
+    """
+    # Normalize agent names/source_server, then apply policy packs.
+    for agent in response.agents:
+        agent.name = _normalize_agent_name(agent.name)
+        agent.source_server = agent.source_server or source_server or ""
+        applied = _apply_policy_packs(agent)
+        logger.debug(
+            "Policy packs applied | agent=%s | source_server=%s | packs=%s",
+            agent.name,
+            agent.source_server,
+            applied,
+        )
+
+    # Verify all tools are assigned
+    assigned_tools: set[str] = set()
+    for agent in response.agents:
+        assigned_tools.update(agent.tools)
+
+    all_tool_names = {t.name for t in tagged_tools}
+    missing_tools = all_tool_names - assigned_tools
+    if missing_tools:
+        logger.warning("LLM did not assign all tools | source_server=%s | missing=%s", source_server, missing_tools)
+        if response.agents:
+            response.agents[0].tools.extend(list(missing_tools))
+
+    return response
+
+
+def create_agent_definitions_with_llm(
+    tagged_tools: List[Any],
+    llm: Any,
+    source_server: str,
+    server_cfg: Optional[Dict[str, Any]] = None,
+) -> AgentDefinitions:
     """
     Use LLM to categorize tools from a single source_server into specialized agents.
     
@@ -268,87 +254,41 @@ def create_agent_definitions_with_llm(tagged_tools: List[Any], llm: Any, tools_b
     - Groups tools by functionality using LLM
     - Creates 3-5 specialized agents per server
     - Each agent gets responsibility and system_message from LLM
-    - Falls back to create_agent_definitions_from_source if LLM fails
-
-
-    NOTE: this function is only used when LLM fails to categorize tools and act as a fallback.
-    ** Using this free us from updating agent_config.json to have all the tools and their source_server. **
+    - If LLM categorization fails, falls back to a single agent containing all tools for the server.
     """
-    logger.info("Creating agent definitions with LLM | tools=%s | max_tools_per_agent=%s", len(tagged_tools), settings.max_tools_per_agent)
+    logger.info(
+        "Creating agent definitions with LLM for source_server=%s | with tools=%s | max_tools_per_agent=%s | has_server_cfg=%s",
+        source_server,
+        len(tagged_tools),
+        settings.max_tools_per_agent,
+        bool(server_cfg),
+    )
     
     if not tagged_tools:
-        logger.warning("No tools provided for LLM categorization")
+        logger.warning("No tools provided for LLM categorization for source_server=%s", source_server)
         return AgentDefinitions(agents=[])
     
-    # Extract tool information from tagged_tools (they already have name and description)
-    tool_info = []
-    for tagged in tagged_tools:
-        schema_obj = getattr(tagged, "args_schema", None)
-        schema_json = None
-        # args_schema is typically a Pydantic model class; convert to JSON schema for LLM consumption.
-        try:
-            if isinstance(schema_obj, type) and issubclass(schema_obj, BaseModel):
-                schema_json = schema_obj.model_json_schema()
-        except Exception:
-            schema_json = None
-
-        tool_info.append({
-            "name": tagged.name,
-            "description": tagged.description or "",
-            "source_server": tagged.source_server or "",
-            "args_schema": schema_json,
-        })
-    
-    # Format tool info as JSON string for the prompt
+    tool_info = _tool_info_for_prompt(tagged_tools)
     tool_info_str = json.dumps(tool_info, indent=2)
     
-    # Use LangChain PromptTemplate
+    server_rules = _server_rules_for_prompt(source_server, server_cfg)
+
     prompt = AGENT_CATEGORIZATION_PROMPT.format(
         tool_count=len(tool_info),
         tool_info=tool_info_str,
         max_tools_per_agent=settings.max_tools_per_agent,
+        server_rules=server_rules,
     )
     
     try:
-        # Use structured output to get AgentDefinitions
-        structured_llm = llm.with_structured_output(AgentDefinitions)
-        response = structured_llm.invoke(prompt)
-        
-        # Normalize agent names/source_server, then apply policy packs (stable rules/context) per source_server.
-        for agent in response.agents:
-            agent.name = _normalize_agent_name(agent.name)
-            agent.source_server = agent.source_server or ""
-            applied = _apply_policy_packs(agent)
-            logger.info(
-                "Policy packs applied | agent=%s | source_server=%s | packs=%s",
-                agent.name,
-                agent.source_server,
-                applied,
-            )
-        
-        # Verify all tools are assigned
-        assigned_tools = set()
-        for agent in response.agents:
-            assigned_tools.update(agent.tools)
-        
-        all_tool_names = {t.name for t in tagged_tools}
-        missing_tools = all_tool_names - assigned_tools
-        
-        if missing_tools:
-            logger.warning("LLM did not assign all tools | missing=%s", missing_tools)
-            # Add missing tools to the first agent
-            if response.agents:
-                response.agents[0].tools.extend(list(missing_tools))
-        
-        logger.info("LLM categorization successful | agents=%s", len(response.agents))
+        response = _invoke_llm_for_agent_defs(llm, prompt)
+        response = _apply_postprocessing(response=response, source_server=source_server, tagged_tools=tagged_tools)
+        logger.debug("LLM categorization successful | agents=%s", len(response.agents))
         return response
         
     except Exception as e:
         logger.exception("LLM categorization failed, falling back to source-based grouping | error=%s", str(e))
-        # Fallback: tagged_tools already have the right structure, just use them directly
-        # NOTE: this fallback is not used as Plan B
-        return create_agent_definitions_from_source(tagged_tools)
-
+        return AgentDefinitions(agents=[])
 
 _TEMPLATE_RE = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 
@@ -401,7 +341,7 @@ def _render_placeholders(text: str) -> str:
             )
             return match.group(0)  # keep {{KEY}} as-is
 
-        logger.info(
+        logger.debug(
             "Prompt placeholder rendered | key=%s",
             key,
         )

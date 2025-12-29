@@ -12,6 +12,12 @@
       "  2) Fix the arguments to match the schema",
       "  3) Retry the SAME tool once with corrected args",
       "- Do not repeat the same invalid args."
+      ,
+      "TASK INSTRUCTIONS RULES (CRITICAL):",
+      "- If the Supervisor hands you a message containing [TASK_INSTRUCTIONS], you MUST follow it exactly.",
+      "- If [TASK_INSTRUCTIONS] specifies a tool call, you MUST call that tool (with correct args) before writing your final answer.",
+      "- If the requested tool is not available to you, say so explicitly and return what information you can without fabricating results.",
+      "- Do NOT respond with vague placeholders like \"user support\"; either attempt the tool(s) or return a concrete error."
     ]
   }
 }

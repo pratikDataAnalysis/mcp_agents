@@ -20,13 +20,12 @@ from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from src.app.api.twilio.audio_stt import transcribe_twilio_audio
-from src.app.api.twilio.media import pick_first_audio_media
 from src.app.config.settings import settings
 from src.app.infra.redis.client import RedisClient
 from src.app.infra.redis.stream_outbound_publisher import RedisStreamOutboundPublisher
 from src.app.infra.redis.bootstrap import bootstrap_supervisor
 from src.app.logging.logger import setup_logger
+from src.app.runtime.pre_supervisor import prepare_for_supervisor
 from src.app.runtime.output_assembler import extract_reply_text
 
 logger = setup_logger(__name__)
@@ -97,45 +96,6 @@ def _build_inbound_context(stream_message_id: str, payload: Dict[str, str]) -> I
         conversation_id=conversation_id,
         timestamp=timestamp,
     )
-
-
-async def _maybe_transcribe_audio(ctx: InboundContext) -> tuple[str, Optional[str]]:
-    """
-    Returns:
-      (text, immediate_user_reply_if_no_text)
-
-    If inbound text is empty and audio media is present, we run STT and return transcript text.
-    If STT fails, returns ("", <user-facing error message>).
-    """
-    if ctx.text:
-        return ctx.text, None
-
-    audio = pick_first_audio_media(ctx.metadata)
-    if not audio:
-        return "", None
-
-    logger.info(
-        "Audio message detected | id=%s | content_type=%s",
-        ctx.stream_message_id,
-        audio.content_type,
-    )
-    try:
-        transcript, _debug_dir = await transcribe_twilio_audio(
-            media_url=audio.url,
-            content_type=audio.content_type,
-            twilio_account_sid=settings.twilio_account_sid or "",
-            twilio_auth_token=settings.twilio_auth_token or "",
-            openai_api_key=settings.openai_api_key or "",
-            model="whisper-1",
-        )
-        if transcript:
-            logger.info("Audio transcribed | id=%s | chars=%s", ctx.stream_message_id, len(transcript))
-            return transcript, None
-        logger.warning("Empty transcription result | id=%s", ctx.stream_message_id)
-        return "", "Sorry, I couldn't transcribe that voice note. Please try again or send text."
-    except Exception:
-        logger.exception("STT failed for audio message | id=%s", ctx.stream_message_id)
-        return "", "Sorry, I couldn't transcribe that voice note. Please try again or send text."
 
 
 async def _invoke_supervisor(supervisor: Any, stream_message_id: str, text: str) -> Any:
@@ -286,26 +246,29 @@ class RedisStreamWorker:
             lag_s = (datetime.now(timezone.utc) - ingress_ts).total_seconds()
             logger.info("Inbound lag | id=%s | lag_s=%.3f", message_id, lag_s)
 
-        # Phase 5: Media-aware ingress. If text is empty but there is audio media, run STT first.
-        text, immediate_reply = await _maybe_transcribe_audio(ctx)
-        result: Any = immediate_reply
+        pre = await prepare_for_supervisor(ctx=ctx, metadata=ctx.metadata)
+        result: Any = pre.immediate_reply
 
-        if not text and result is None:
-            logger.warning("Empty text message | id=%s | payload=%s", ctx.stream_message_id, payload)
-            await client.xack(self.stream_name, self.group_name, message_id)
-            return
-
-        logger.info(
-            "Processing message | id=%s | source=%s | user_id=%s | text=%s",
-            ctx.stream_message_id,
-            ctx.source,
-            ctx.user_id,
-            text,
-        )
+        if pre.immediate_reply is not None:
+            logger.info(
+                "Immediate reply (pre-supervisor) | id=%s | reply=%s",
+                ctx.stream_message_id,
+                pre.immediate_reply,
+            )
+        else:
+            logger.info(
+                "Processing message | id=%s | source=%s | user_id=%s | detected_lang=%s | is_english=%s | inbound_has_audio=%s",
+                ctx.stream_message_id,
+                ctx.source,
+                ctx.user_id,
+                pre.detected_language,
+                pre.is_english,
+                pre.inbound_has_audio,
+            )
 
         try:
             if result is None:
-                result = await _invoke_supervisor(self.supervisor, ctx.stream_message_id, text)
+                result = await _invoke_supervisor(self.supervisor, ctx.stream_message_id, pre.supervisor_input)
 
             # Output extraction
             t_extract_start = time.perf_counter()

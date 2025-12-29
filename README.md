@@ -130,18 +130,7 @@ Edit `mcp_configs/mcp_servers.json` to configure your MCP servers:
 
 ### 4. Configure Agents
 
-Edit `src/app/agents/agent_config.json` to define agent responsibilities and system messages:
-
-```json
-{
-  "agents": {
-    "notionApi": {
-      "responsibility": "Manages Notion pages, databases, and content.",
-      "system_message": "You are a Notion assistant..."
-    }
-  }
-}
-```
+Agents are created at worker bootstrap time via LLM-based tool categorization (plus policy packs).
 
 ## 🏃 Running the Application
 
@@ -194,7 +183,7 @@ This script will:
   - Load MCP servers from `mcp_configs/mcp_servers.json`
   - Discover tools from each MCP server
   - Group tools by `source_server` (from MCP config)
-  - Create agents from `src/app/agents/agent_config.json`
+  - Create agents via LLM-based tool categorization
   - Assign tools to agents based on `source_server`
   - Create Supervisor using `src/app/supervisor/supervisor_creator.py`
 - **Runtime phase:**
@@ -263,7 +252,6 @@ pfm/
 ├── src/
 │   └── app/
 │       ├── agents/
-│       │   ├── agent_config.json # Agent definitions
 │       │   ├── agent_creator.py  # Agent factory
 │       │   └── agent_definitions.py
 │       ├── api/

@@ -1,9 +1,25 @@
 from langchain_core.prompts import PromptTemplate
 
 AGENT_CATEGORIZATION_PROMPT = PromptTemplate(
-    input_variables=["tool_count", "tool_info", "max_tools_per_agent"],
+    input_variables=["tool_count", "tool_info", "max_tools_per_agent", "server_rules"],
     template="""
 You are an expert in designing multi-agent systems. I have a collection of {tool_count} tools from MCP servers that I want to organize into logical agent groups.
+
+SERVER-SPECIFIC RULES (STRICT, if provided you MUST follow them):
+{server_rules}
+
+STRICT RULES WHEN server_rules IS PROVIDED:
+- Treat server_rules as the PRIMARY SOURCE OF TRUTH for agent categorization.
+- If server_rules includes desired_agents:
+  - You MUST create agents with EXACTLY those agent names (no renaming).
+  - You MUST assign the listed tools to the specified agent (do not move them to other agents).
+  - You MUST NOT omit any listed tool that exists in tool_info.
+  - If a tool listed in desired_agents does NOT exist in tool_info, you MUST ignore it (you cannot invent tools) and proceed.
+- If server_rules includes blacklisted_tools:
+  - You MUST NOT assign any tool in blacklisted_tools to any agent.
+- You MUST NOT invent tool names. Every tool you assign MUST come from tool_info.
+- You MAY create additional agents ONLY for tools that are present in tool_info but not covered by desired_agents
+  (or when server_rules is empty / not provided). Use ONE extra agent named "<source_server>_misc" for leftovers.
 
 Each tool has a name, description, source_server it belongs to, and may include an args_schema (tool argument schema).
 Here are the available tools:

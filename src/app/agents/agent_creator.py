@@ -21,6 +21,7 @@ from langchain_core.tools import BaseTool
 from langchain.agents import create_agent
 from src.app.config.settings import settings
 from src.app.agents.agent_definitions import AgentDefinition
+from src.app.supervisor.state import AgentTaskState
 
 from src.app.logging.logger import setup_logger 
 logger = setup_logger(__name__)
@@ -73,12 +74,21 @@ class AgentCreator:
                     model=f"{settings.llm_provider}:{self.model_name}",
                     tools=agent_tools,
                     system_prompt=agent_def.system_message,
+                    state_schema=AgentTaskState,
                     name=agent_def.name,
                 )
                 agents.append(agent)
                 logger.info("Agent created | name=%s | tools=%s", agent_def.name, len(agent_tools))
+                #self.print_tools(agent_def.name, agent_tools)
             except Exception:
                 logger.exception("Failed to create agent | name=%s", agent_def.name)
 
         logger.info("Agent creation complete | agents=%s", len(agents))
         return agents
+
+    def print_tools(self, name: str, tools: List[BaseTool]) -> None:
+        """
+        Print the tools in a readable format.
+        """
+        for tool in tools:
+            logger.info("Agent=%s | Tool | name=%s | description=%s", name, tool.name, tool.description)

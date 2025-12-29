@@ -38,3 +38,13 @@ class SupervisorStructuredReply(BaseModel):
         default=None,
         description="If status=error, a short user-safe error message.",
     )
+
+    # Optional TTS artifact fields (Phase: audio reply generation)
+    tts_file_path: Optional[str] = Field(
+        default=None,
+        description="If an audio reply was generated, local file path to the synthesized audio.",
+    )
+    tts_format: Optional[str] = Field(
+        default=None,
+        description="Audio format for tts_file_path (e.g., mp3).",
+    )

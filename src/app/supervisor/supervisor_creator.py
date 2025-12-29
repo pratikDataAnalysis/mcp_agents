@@ -12,7 +12,7 @@ Responsibilities:
 
 from __future__ import annotations
 
-from typing import Dict, Any
+from typing import Any, Dict, List, Sequence
 
 from langgraph_supervisor import create_supervisor
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -21,23 +21,10 @@ from src.app.logging.logger import setup_logger
 from src.app.supervisor.prompts.supervisor_prompt import SUPERVISOR_PROMPT
 from src.app.supervisor.tools import get_current_datetime
 from src.app.supervisor.structured_response import SupervisorStructuredReply
-from typing import TypedDict, List
-from langchain_core.messages import BaseMessage
+from src.app.supervisor.handoff_tools import create_task_instructions_handoff_tool
+from src.app.supervisor.state import SupervisorTaskState
 
 logger = setup_logger(__name__)
-
-class SupervisorState(TypedDict, total=False):
-    """
-    Minimal state schema required for langgraph-supervisor structured output.
-
-    Why:
-    - response_format writes into state["structured_response"]
-    - langgraph-supervisor requires that key to exist in the schema
-    """
-    messages: List[BaseMessage]
-    structured_response: dict
-    remaining_steps: int
-
 
 class SupervisorCreator:
     """
@@ -56,7 +43,7 @@ class SupervisorCreator:
 
     def create(
         self,
-        agents: Dict[str, Any],
+        agents: Sequence[Any],
         agent_definitions: Any,
     ) -> Any:
         """
@@ -79,13 +66,25 @@ class SupervisorCreator:
 
         prompt = self._build_prompt(agent_definitions)
 
+        # IMPORTANT: langgraph-supervisor treats any provided handoff tools as "custom handoffs"
+        # and requires a handoff tool for EVERY sub-agent by agent.name (not by source_server).
+        custom_handoff_tools: List[Any] = []
+        for a in agents:
+            agent_name = getattr(a, "name", None)
+            if not agent_name:
+                raise ValueError("All agents must have a non-empty name for custom handoff tools")
+            custom_handoff_tools.append(
+                create_task_instructions_handoff_tool(agent_name=str(agent_name))
+            )
+
         supervisor = create_supervisor(
             agents=agents,
             model=self.model,
             prompt=prompt,
-            tools=[get_current_datetime],
+            tools=[get_current_datetime, *custom_handoff_tools],
             output_mode="full_history",
-            response_format=SupervisorStructuredReply
+            response_format=SupervisorStructuredReply,
+            state_schema=SupervisorTaskState,
         ).compile()
 
         logger.info("Supervisor compiled successfully")

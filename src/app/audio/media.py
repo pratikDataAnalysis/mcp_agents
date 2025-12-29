@@ -2,13 +2,8 @@
 Twilio inbound media helpers (WhatsApp, MMS, etc.).
 
 Purpose:
-- Keep "is this an audio/media message?" detection logic out of the FastAPI webhook.
+- Keep "is this an audio/media message?" detection logic out of the FastAPI webhook/worker.
 - Provide a stable metadata contract we can publish to Redis and later interpret in workers.
-
-Twilio sends media fields in form-encoded payloads:
-- NumMedia: "0" | "1" | ...
-- MediaUrl0, MediaContentType0
-- MediaUrl1, MediaContentType1, ...
 """
 
 from __future__ import annotations
@@ -79,4 +74,5 @@ def pick_first_audio_media(metadata: Mapping[str, Any]) -> Optional[TwilioMediaI
         if tm.is_audio:
             return tm
     return None
+
 
