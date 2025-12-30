@@ -22,6 +22,9 @@ class OutputEnvelope:
     source: str
     user_id: str
     reply_text: str
+    # Optional media reply (e.g., WhatsApp voice note reply)
+    reply_audio_url: Optional[str] = None
+    reply_audio_mime_type: Optional[str] = None
     status: str  # "success" | "error"
     timestamp: str  # UTC ISO string
     metadata: Optional[str] = None  # JSON string

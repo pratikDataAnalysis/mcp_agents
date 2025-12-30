@@ -100,11 +100,10 @@ def _llm_translate(*, text: str, target_language: str, source_language: Optional
     return llm.invoke(prompt)
 
 
-# -----------------------------
-# OpenAI TTS (local file output)
-# -----------------------------
-
-OPENAI_TTS_URL = settings.openai_tts_url
+def _looks_like_tts_model(model: str) -> bool:
+    m = (model or "").strip().lower()
+    # OpenAI TTS models are typically "tts-*" (keep this heuristic permissive).
+    return m.startswith("tts-") or ("tts" in m)
 
 
 @dataclass(frozen=True)
@@ -118,15 +117,27 @@ def _openai_tts_blocking(*, text: str, voice: str, model: str, fmt: str) -> Text
     if not api_key:
         raise ValueError("OpenAI API key is missing (OPENAI_API_KEY)")
 
+    # Be defensive: LLMs often try to pass chat models here (gpt-4, gpt-3.5-turbo, etc).
+    resolved_model = model if _looks_like_tts_model(model) else settings.tts_model_name
+
+    # Resolve URL at call time (not import time) so env overrides are respected.
+    tts_url = (settings.openai_tts_url or "").strip()
+    if tts_url.startswith("/"):
+        # Common misconfig: only a path provided. Default to OpenAI public host.
+        tts_url = "https://api.openai.com" + tts_url
+    if not (tts_url.startswith("http://") or tts_url.startswith("https://")):
+        raise ValueError(f"Invalid openai_tts_url={tts_url!r}. Expected a full URL like https://api.openai.com/v1/audio/speech")
+
     payload = {
-        "model": model,
+        "model": resolved_model,
         "voice": voice,
         "input": text,
-        "format": fmt,
+        # OpenAI expects response_format (mp3/wav/ogg/etc).
+        "response_format": fmt,
     }
     body = json.dumps(payload).encode("utf-8")
     req = Request(
-        OPENAI_TTS_URL,
+        tts_url,
         data=body,
         method="POST",
         headers={

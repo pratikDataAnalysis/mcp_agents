@@ -8,7 +8,7 @@ Responsibilities:
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
 from twilio.rest import Client
 
@@ -59,6 +59,31 @@ class TwilioWhatsAppSender:
             from_=self.whatsapp_from,
             to=to,
             body=body,
+        )
+
+        logger.info("Twilio send success | sid=%s | to=%s", msg.sid, to)
+        return msg.sid
+
+    def send_text_with_media(self, *, to: str, body: str, media_url: str | List[str]) -> str:
+        """
+        Send a WhatsApp message that includes media (audio/image/etc) plus an optional body.
+
+        Twilio expects a publicly reachable URL for each media item.
+        """
+        if not to:
+            raise ValueError("TwilioWhatsAppSender: 'to' is required")
+        if not media_url:
+            raise ValueError("TwilioWhatsAppSender: 'media_url' is required")
+
+        urls = media_url if isinstance(media_url, list) else [media_url]
+
+        logger.info("Sending WhatsApp media message via Twilio | to=%s | media_count=%s", to, len(urls))
+
+        msg = self._client.messages.create(
+            from_=self.whatsapp_from,
+            to=to,
+            body=body or "",
+            media_url=urls,
         )
 
         logger.info("Twilio send success | sid=%s | to=%s", msg.sid, to)

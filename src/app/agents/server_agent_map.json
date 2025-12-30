@@ -11,7 +11,12 @@
         "notionApi_API-create-a-comment",
         "notionApi_API-get-self",
         "notionApi_API-get-user",
-        "notionApi_API-get-users"
+        "notionApi_API-get-users",
+        "notionApi_API-query-data-source",
+        "notionApi_API-retrieve-a-data-source",
+        "notionApi_API-create-a-data-source",
+        "notionApi_API-update-a-data-source",
+        "notionApi_API-list-data-source-templates"
       ],
       "agents": [
         {
@@ -30,17 +35,6 @@
             "notionApi_API-patch-page",
             "notionApi_API-move-page",
             "notionApi_API-retrieve-a-page-property"
-          ]
-        },
-        {
-          "name": "notion_data_sources",
-          "responsibility": "Work with Notion databases/data sources (query, retrieve, create, update, templates).",
-          "tools": [
-            "notionApi_API-query-data-source",
-            "notionApi_API-retrieve-a-data-source",
-            "notionApi_API-create-a-data-source",
-            "notionApi_API-update-a-data-source",
-            "notionApi_API-list-data-source-templates"
           ]
         }
       ]

@@ -101,8 +101,9 @@ class OutboundDispatcher:
         source = (payload.get("source") or "unknown").strip()
         user_id = (payload.get("user_id") or "").strip()
         reply_text = (payload.get("reply_text") or "").strip()
+        reply_audio_url = (payload.get("reply_audio_url") or "").strip()
 
-        if not out_id or not user_id or not reply_text:
+        if not out_id or not user_id or (not reply_text and not reply_audio_url):
             logger.warning("Invalid outbound payload | stream_id=%s | payload=%s", stream_id, payload)
             # ACK invalid to avoid poisoning outbound stream
             await client.xack(self.stream_name, self.group_name, stream_id)
@@ -119,7 +120,10 @@ class OutboundDispatcher:
         try:
             if source == "whatsapp":
                 # Twilio expects 'to' in whatsapp format, which inbound already uses.
-                sid = self.twilio_sender.send_text(to=user_id, body=reply_text)
+                if reply_audio_url:
+                    sid = self.twilio_sender.send_text_with_media(to=user_id, body=reply_text, media_url=reply_audio_url)
+                else:
+                    sid = self.twilio_sender.send_text(to=user_id, body=reply_text)
                 logger.debug("Delivery success | out_id=%s | twilio_sid=%s", out_id, sid)
             else:
                 raise ValueError(f"Unsupported outbound source={source!r}")

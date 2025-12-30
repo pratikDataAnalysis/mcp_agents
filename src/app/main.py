@@ -17,6 +17,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from src.app.api.whatsapp_webhook import router as whatsapp_router
+from src.app.api.media import router as media_router
 from src.app.config.settings import settings
 from src.app.logging.logger import setup_logger
 
@@ -31,6 +32,7 @@ def create_app() -> FastAPI:
 
     # Register routes
     app.include_router(whatsapp_router)
+    app.include_router(media_router)
 
     logger.info(
         "FastAPI ingress service initialized | env=%s",

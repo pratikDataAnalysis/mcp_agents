@@ -23,6 +23,9 @@ langgraph_supervisor==0.0.31
 langchain-openai==1.1.4
 langchain-ollama==1.0.1
 
+# LangSmith tracing (observability)
+langsmith>=0.4.0
+
 # -----------------------------
 # Configuration & validation
 # -----------------------------

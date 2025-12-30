@@ -20,6 +20,7 @@ from typing import Any, Dict, List
 from src.app.agents.agent_creator import AgentCreator
 from src.app.agents.agent_definitions import AgentDefinitions, create_agent_definitions_with_llm
 from src.app.config.settings import settings
+from src.app.infra.langsmith import setup_langsmith_tracing
 from src.app.infra.tool_validation import wrap_tool_with_validation
 from src.app.logging.logger import setup_logger
 from src.app.mcp.mcp_client import MCPClient
@@ -282,6 +283,9 @@ async def bootstrap_supervisor() -> Any:
     Full bootstrap pipeline (run once per worker process).
     """
     logger.info("Worker bootstrap started")
+
+    # Optional tracing/observability (LangSmith)
+    setup_langsmith_tracing()
 
     # Step 1: LLM (shared)
     llm = build_llm_model(settings.llm_model_name)
