@@ -28,6 +28,7 @@ docs
 dist/
 build/
 .cache/
+data/
 
 *.ipynb
 .ipynb_checkpoints/

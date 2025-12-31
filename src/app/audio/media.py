@@ -2,19 +2,21 @@
 Twilio inbound media helpers (WhatsApp, MMS, etc.).
 
 Purpose:
-- Keep "is this an audio/media message?" detection logic out of the FastAPI webhook.
+- Keep "is this an audio/media message?" detection logic out of the FastAPI webhook/worker.
 - Provide a stable metadata contract we can publish to Redis and later interpret in workers.
 
-Twilio sends media fields in form-encoded payloads:
-- NumMedia: "0" | "1" | ...
-- MediaUrl0, MediaContentType0
-- MediaUrl1, MediaContentType1, ...
+Also:
+- Provide small, reusable helpers for outbound media handling (e.g., TTS file hosting).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
+from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
+
+from src.app.config.settings import settings
 
 
 @dataclass(frozen=True)
@@ -79,4 +81,43 @@ def pick_first_audio_media(metadata: Mapping[str, Any]) -> Optional[TwilioMediaI
         if tm.is_audio:
             return tm
     return None
+
+
+def ensure_dir(path: str) -> None:
+    os.makedirs(path, exist_ok=True)
+
+
+def guess_mime_type_from_audio_format(fmt: str) -> str:
+    fmt_l = (fmt or "").lower().strip()
+    if fmt_l == "mp3":
+        return "audio/mpeg"
+    if fmt_l == "wav":
+        return "audio/wav"
+    if fmt_l == "ogg":
+        return "audio/ogg"
+    if fmt_l == "m4a":
+        return "audio/mp4"
+    return "application/octet-stream"
+
+
+def build_public_media_url(*, rel_path: str) -> Optional[str]:
+    """
+    Build a publicly reachable URL for a file served by the ingress media route:
+      GET /media/{rel_path:path}
+    """
+    base = (settings.media_public_base_url or settings.base_url or "").strip().rstrip("/")
+    if not base:
+        return None
+    rel = rel_path.lstrip("/")
+    return f"{base}/media/{rel}"
+
+
+def build_media_root_path(*, rel_path: str) -> str:
+    """
+    Convert a relative path under the media root (e.g., 'tts/abc.mp3')
+    into an absolute filesystem path rooted at settings.media_root_dir.
+    """
+    rel = rel_path.lstrip("/")
+    root = Path(settings.media_root_dir)
+    return str(root / rel)
 

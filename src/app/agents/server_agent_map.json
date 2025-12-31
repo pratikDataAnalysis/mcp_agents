@@ -1,0 +1,74 @@
+{
+  "servers": {
+    "notionApi": {
+      "blacklisted_tools": [
+        "notionApi_API-retrieve-a-block",
+        "notionApi_API-get-block-children",
+        "notionApi_API-patch-block-children",
+        "notionApi_API-update-a-block",
+        "notionApi_API-delete-a-block",
+        "notionApi_API-retrieve-a-comment",
+        "notionApi_API-create-a-comment",
+        "notionApi_API-get-self",
+        "notionApi_API-get-user",
+        "notionApi_API-get-users",
+        "notionApi_API-query-data-source",
+        "notionApi_API-retrieve-a-data-source",
+        "notionApi_API-create-a-data-source",
+        "notionApi_API-update-a-data-source",
+        "notionApi_API-list-data-source-templates"
+      ],
+      "agents": [
+        {
+          "name": "notion_search",
+          "responsibility": "Search and retrieve notes/pages from Notion by keyword or title.",
+          "tools": [
+            "notionApi_API-post-search"
+          ]
+        },
+        {
+          "name": "notion_pages",
+          "responsibility": "Create, retrieve, update, and move Notion pages (notes).",
+          "tools": [
+            "notionApi_API-post-page",
+            "notionApi_API-retrieve-a-page",
+            "notionApi_API-patch-page",
+            "notionApi_API-move-page",
+            "notionApi_API-retrieve-a-page-property"
+          ]
+        }
+      ]
+    },
+    "zoom": {
+      "blacklisted_tools": [],
+      "agents": [
+        {
+          "name": "zoom_meeting_manager",
+          "responsibility": "Create, update, list, and delete Zoom meetings.",
+          "tools": [
+            "zoom_get_meetings",
+            "zoom_create_meeting",
+            "zoom_update_meeting",
+            "zoom_delete_meeting"
+          ]
+        }
+      ]
+    },
+    "localAudio": {
+      "blacklisted_tools": [],
+      "agents": [
+        {
+          "name": "localaudio",
+          "responsibility": "Detect language, translate text between languages, and generate speech audio from text.",
+          "tools": [
+            "localAudio_detect_and_translate_to_english",
+            "localAudio_translate_text",
+            "localAudio_text_to_speech"
+          ]
+        }
+      ]
+    }
+  }
+}
+
+

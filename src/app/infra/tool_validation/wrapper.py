@@ -53,6 +53,10 @@ class ValidatingTool(BaseTool):
             name=inner.name,
             description=getattr(inner, "description", "") or "",
             args_schema=getattr(inner, "args_schema", None),
+            tags=getattr(inner, "tags", None),
+            metadata=getattr(inner, "metadata", None),
+            handle_tool_error=getattr(inner, "handle_tool_error", False),
+            handle_validation_error=getattr(inner, "handle_validation_error", False),
         )
         self._inner = inner
 

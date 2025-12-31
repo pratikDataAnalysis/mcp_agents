@@ -177,7 +177,7 @@ class MCPClient:
         Returns:
             Dict[str, MCPServerConfig]: registry of configured MCP servers
         """
-        logger.info(f"Loading MCP config from: {self.config_path}")
+        logger.info(f"Loading external MCP servers from config: {self.config_path}")
 
         if not os.path.exists(self.config_path):
             raise FileNotFoundError(f"MCP config file not found: {self.config_path}")
@@ -248,7 +248,7 @@ class MCPClient:
             )
 
         self._servers = servers
-        logger.info(f"MCP servers loaded: {list(self._servers.keys())}")
+        logger.info(f"External MCP servers loaded: {list(self._servers.keys())}")
 
         # Helpful debug logs (do not print secret values)
         for s in self._servers.values():
@@ -256,12 +256,12 @@ class MCPClient:
             safe_env = list(s.env.keys())
 
             if s.transport == "stdio":
-                logger.info(
+                logger.debug(
                     f"MCP server '{s.name}' | transport=stdio | command={s.command!r} | args_count={len(s.args)} "
                     f"| env_keys={safe_env} | headers={safe_headers}"
                 )
             else:
-                logger.info(
+                logger.debug(
                     f"MCP server '{s.name}' | transport={s.transport} | url={s.url!r} "
                     f"| headers={safe_headers} | env_keys={safe_env}"
                 )
@@ -315,7 +315,7 @@ class MCPClient:
                 conn_map,
                 tool_name_prefix=True,  # avoids collisions across MCP servers
             )
-            logger.info("MCP client initialized (tool_name_prefix enabled).")
+            logger.debug("MCP client initialized (tool_name_prefix enabled).")
         except TypeError:
             logger.warning(
                 "MultiServerMCPClient does not support tool_name_prefix in this version. "
@@ -325,7 +325,7 @@ class MCPClient:
             logger.info("MCP client initialized (tool_name_prefix disabled).")
 
         self._tools_cache.clear()
-        logger.info("MCP client connected and tool cache cleared.")
+        logger.debug("MCP client connected and tool cache cleared.")
 
     async def get_tools(self, server_name: str) -> List[Any]:
         """

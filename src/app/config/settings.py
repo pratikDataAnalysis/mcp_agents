@@ -1,3 +1,4 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,7 +9,6 @@ class Settings(BaseSettings):
     base_url: str = "http://localhost:8000"
 
     # Agent configuration
-    agent_config_path: str = "./src/app/agents/agent_config.json"
     max_tools_per_agent: int = None
 
     # Twilio
@@ -25,7 +25,44 @@ class Settings(BaseSettings):
     llm_model_name: str | None = None
     openai_transcriptions_url: str = "https://api.openai.com/v1/audio/transcriptions"
     openai_translations_url: str = "https://api.openai.com/v1/audio/translations"
+    openai_tts_url: str = "https://api.openai.com/v1/audio/speech"
     openai_stt_force_english: bool = True
+
+    # Audio / TTS defaults
+    # Default to the most compatible OpenAI TTS model name; can be overridden via .env
+    tts_model_name: str = "tts-1"
+    tts_voice: str = "alloy"
+    tts_format: str = "mp3"
+
+    # Outbound audio reply delivery (WhatsApp voice-note -> reply with text + audio)
+    #
+    # IMPORTANT: Twilio requires a publicly reachable HTTPS URL for media delivery.
+    # In local dev, you typically set `MEDIA_PUBLIC_BASE_URL` to your ngrok URL.
+    reply_with_audio_when_inbound_has_audio: bool = True
+    media_root_dir: str = "./data/media"
+    media_public_base_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("MEDIA_PUBLIC_BASE_URL", "media_public_base_url"),
+    )
+
+    # LangSmith / LangChain tracing (optional)
+    # Prefer standard LANGCHAIN_* env vars; keep LANGSMITH_* as backwards-compatible aliases.
+    langchain_tracing_v2: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING"),
+    )
+    langchain_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("LANGCHAIN_API_KEY", "LANGSMITH_API_KEY"),
+    )
+    langchain_project: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("LANGCHAIN_PROJECT", "LANGSMITH_PROJECT"),
+    )
+    langchain_endpoint: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("LANGCHAIN_ENDPOINT", "LANGSMITH_ENDPOINT"),
+    )
 
     # MCP (generic)
     mcp_config_path: str = "./mcp_configs/mcp_servers.json"

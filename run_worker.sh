@@ -30,7 +30,11 @@ log "Repo root: $REPO_ROOT"
 # 2) Ensure venv exists
 if [[ ! -d ".venv" ]]; then
   log "Creating virtualenv: .venv"
-  python3 -m venv .venv
+  if command -v python3.13 >/dev/null 2>&1; then
+    python3.13 -m venv .venv
+  else
+    python3 -m venv .venv
+  fi
 else
   log "Virtualenv exists: .venv"
 fi
@@ -39,6 +43,27 @@ fi
 # shellcheck disable=SC1091
 source ".venv/bin/activate"
 log "Activated venv: $(python --version)"
+
+# IMPORTANT: Always use `python -m pip` (not `pip`) to avoid mismatched pip shebangs
+# that can point at a different Python (e.g., 3.14) even when `python` is 3.13.
+PIP_INFO="$(python -m pip --version || true)"
+log "pip module: $PIP_INFO"
+
+if ! echo "$PIP_INFO" | grep -q "python 3\\.13"; then
+  log "Detected non-3.13 pip/python mismatch; recreating .venv with python3.13"
+  deactivate || true
+  rm -rf ".venv"
+  if command -v python3.13 >/dev/null 2>&1; then
+    python3.13 -m venv .venv
+  else
+    log "ERROR: python3.13 not found; please install Python 3.13 and rerun."
+    exit 1
+  fi
+  # shellcheck disable=SC1091
+  source ".venv/bin/activate"
+  log "Recreated venv: $(python --version)"
+  log "pip module: $(python -m pip --version)"
+fi
 
 # 4) Install dependencies only when requirements.txt changes
 REQ_FILE="requirements.txt"
@@ -59,7 +84,7 @@ fi
 if [[ "$CURRENT_HASH" != "$PREV_HASH" ]]; then
   log "requirements.txt changed or first install detected"
   log "Installing dependencies..."
-  pip install -r "$REQ_FILE"
+  python -m pip install -r "$REQ_FILE"
   echo "$CURRENT_HASH" > "$REQ_HASH_FILE"
   log "Dependencies installed and hash updated"
 else

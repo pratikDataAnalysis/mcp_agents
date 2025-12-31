@@ -21,7 +21,7 @@ from typing import Any
 from src.app.logging.logger import setup_logger
 from src.app.infra.redis import RedisClient, RedisStreamPublisher
 from src.app.config.settings import settings
-from src.app.api.twilio.media import build_media_metadata_from_form
+from src.app.audio.media import build_media_metadata_from_form
 
 logger = setup_logger(__name__)
 

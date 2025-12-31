@@ -50,7 +50,11 @@ log "Repo root: $ROOT_DIR"
 # 1) Ensure virtualenv exists
 if [ ! -d "$VENV_DIR" ]; then
   log "Virtualenv not found. Creating at: $VENV_DIR"
-  python3 -m venv "$VENV_DIR"
+  if command -v python3.13 >/dev/null 2>&1; then
+    python3.13 -m venv "$VENV_DIR"
+  else
+    python3 -m venv "$VENV_DIR"
+  fi
 else
   log "Virtualenv exists: $VENV_DIR"
 fi
@@ -59,6 +63,26 @@ fi
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
 log "Activated venv: $(python -V)"
+
+# IMPORTANT: Always use `python -m pip` (not `pip`) to avoid mismatched pip shebangs.
+PIP_INFO="$(python -m pip --version || true)"
+log "pip module: $PIP_INFO"
+
+if ! echo "$PIP_INFO" | grep -q "python 3\\.13"; then
+  log "Detected non-3.13 pip/python mismatch; recreating $VENV_DIR with python3.13"
+  deactivate || true
+  rm -rf "$VENV_DIR"
+  if command -v python3.13 >/dev/null 2>&1; then
+    python3.13 -m venv "$VENV_DIR"
+  else
+    log "ERROR: python3.13 not found; please install Python 3.13 and rerun."
+    exit 1
+  fi
+  # shellcheck disable=SC1091
+  source "$VENV_DIR/bin/activate"
+  log "Recreated venv: $(python -V)"
+  log "pip module: $(python -m pip --version)"
+fi
 
 # 3) Install dependencies ONLY if requirements.txt changed (or first install)
 if [ ! -f "$REQ_FILE" ]; then
@@ -76,8 +100,8 @@ fi
 if [ "$CURRENT_HASH" != "$STORED_HASH" ]; then
   log "requirements.txt changed or first install detected"
   log "Installing dependencies..."
-  pip install --upgrade pip >/dev/null
-  pip install -r "$REQ_FILE"
+  python -m pip install --upgrade pip >/dev/null
+  python -m pip install -r "$REQ_FILE"
   echo "$CURRENT_HASH" > "$REQ_HASH_FILE"
   log "Dependencies installed and hash updated"
 else
