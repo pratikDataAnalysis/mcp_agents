@@ -374,3 +374,7 @@ pkill -f "src.app.dispatchers.outbound_dispatcher"
 ## 🤝 Contributing
 
 [Add contributing guidelines here]
+
+redis-cli --scan --pattern 'memory:user:*:events'
+redis-cli LLEN 'memory:user:whatsapp:+918826545723:events'
+redis-cli LRANGE 'memory:user:whatsapp:+918826545723:events' 0 2

@@ -21,6 +21,7 @@ from src.app.infra.tool_validation.notion_http import (
     normalize_notion_http_validation_error,
 )
 from src.app.infra.tool_validation.registry import get_validator
+from src.app.infra.tool_execution_tracker import record_tool_result
 from src.app.logging.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -129,7 +130,9 @@ class ValidatingTool(BaseTool):
         normalized = normalize_notion_http_validation_error(self.name, result)
         if normalized is not None:
             log_normalized_notion_error(self.name, normalized)
+            record_tool_result(name=self.name, result=normalized)
             return normalized
+        record_tool_result(name=self.name, result=result)
         return result
 
     async def _arun(self, **kwargs: Any) -> Any:
@@ -146,7 +149,9 @@ class ValidatingTool(BaseTool):
         normalized = normalize_notion_http_validation_error(self.name, result)
         if normalized is not None:
             log_normalized_notion_error(self.name, normalized)
+            record_tool_result(name=self.name, result=normalized)
             return normalized
+        record_tool_result(name=self.name, result=result)
         return result
 
 

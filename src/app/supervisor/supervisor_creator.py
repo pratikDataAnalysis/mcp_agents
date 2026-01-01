@@ -20,6 +20,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from src.app.logging.logger import setup_logger
 from src.app.supervisor.prompts.supervisor_prompt import SUPERVISOR_PROMPT
 from src.app.supervisor.tools import get_current_datetime
+from src.app.supervisor.memory_tools import memory_get_context
 from src.app.supervisor.structured_response import SupervisorStructuredReply
 from src.app.supervisor.handoff_tools import create_task_instructions_handoff_tool
 from src.app.supervisor.state import SupervisorTaskState
@@ -81,8 +82,8 @@ class SupervisorCreator:
             agents=agents,
             model=self.model,
             prompt=prompt,
-            tools=[get_current_datetime, *custom_handoff_tools],
-            output_mode="full_history",
+            tools=[get_current_datetime, memory_get_context, *custom_handoff_tools],
+            output_mode="last_message",
             response_format=SupervisorStructuredReply,
             state_schema=SupervisorTaskState,
         ).compile()

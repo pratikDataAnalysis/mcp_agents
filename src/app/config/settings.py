@@ -94,6 +94,13 @@ class Settings(BaseSettings):
     # Idempotency
     outbound_idempotency_ttl_seconds: int = 7 * 24 * 60 * 60  # 7 days
 
+    # Memory (Redis-backed JSON)
+    memory_key_prefix: str = "memory"
+    memory_conversation_ttl_seconds: int = 12 * 60 * 60  # 12 hours
+    memory_user_profile_ttl_seconds: int = 180 * 24 * 60 * 60  # 180 days
+    memory_user_events_ttl_seconds: int = 30 * 24 * 60 * 60  # 30 days
+    memory_user_events_max_items: int = 15
+
     # Notes page id
     notes_parent_page_id: str | None = None
 

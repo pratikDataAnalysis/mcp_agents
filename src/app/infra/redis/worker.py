@@ -24,12 +24,14 @@ from typing import Any, Dict, Optional
 from src.app.config.settings import settings
 from src.app.audio.media import build_media_root_path, build_public_media_url, ensure_dir, guess_mime_type_from_audio_format
 from src.app.infra.redis.client import RedisClient
+from src.app.infra.redis.memory_store import RedisMemoryStore
 from src.app.infra.redis.stream_outbound_publisher import RedisStreamOutboundPublisher
 from src.app.infra.redis.bootstrap import bootstrap_supervisor
 from src.app.logging.logger import setup_logger
 from src.app.mcp.tools.language_tools import localAudio_text_to_speech
 from src.app.runtime.pre_supervisor import prepare_for_supervisor
 from src.app.runtime.output_assembler import extract_reply_text
+from src.app.infra.tool_execution_tracker import any_grounded_success, reset_tool_events
 
 logger = setup_logger(__name__)
 
@@ -111,7 +113,11 @@ async def _invoke_supervisor(supervisor: Any, ctx: InboundContext, text: str) ->
     # - thread_id groups traces per conversation
     # - metadata provides quick filters/search
     config = {
-        "configurable": {"thread_id": ctx.conversation_id},
+        "configurable": {
+            "thread_id": ctx.conversation_id,
+            "conversation_id": ctx.conversation_id,
+            "user_id": ctx.user_id,
+        },
         "tags": [ctx.source],
         "metadata": {
             "stream_message_id": ctx.stream_message_id,
@@ -126,6 +132,41 @@ async def _invoke_supervisor(supervisor: Any, ctx: InboundContext, text: str) ->
     logger.info("Supervisor done | id=%s | supervisor_ainvoke_s=%.3f", ctx.stream_message_id, (t_sup_end - t_sup_start))
     logger.info("Supervisor result | id=%s | result=%s", ctx.stream_message_id, result)
     return result
+
+
+def _extract_structured_fields(result: Any) -> tuple[Optional[str], list[str], Optional[str]]:
+    """
+    Extract (status, actions, task_instructions) from supervisor result if present.
+    """
+    status: Optional[str] = None
+    actions: list[str] = []
+    task_instructions: Optional[str] = None
+
+    if isinstance(result, dict):
+        ti = result.get("task_instructions")
+        if isinstance(ti, str) and ti.strip():
+            task_instructions = ti.strip()
+
+        sr = result.get("structured_response")
+
+        # Pydantic-like object
+        st = getattr(sr, "status", None)
+        if isinstance(st, str) and st.strip():
+            status = st.strip()
+        acts = getattr(sr, "actions", None)
+        if isinstance(acts, list):
+            actions = [str(x) for x in acts if str(x).strip()]
+
+        # Dict-like
+        if isinstance(sr, dict):
+            st2 = sr.get("status")
+            if isinstance(st2, str) and st2.strip():
+                status = st2.strip()
+            acts2 = sr.get("actions")
+            if isinstance(acts2, list):
+                actions = [str(x) for x in acts2 if str(x).strip()]
+
+    return status, actions, task_instructions
 
 
 def _build_outbound_payload(ctx: InboundContext, reply_text: str) -> Dict[str, str]:
@@ -332,6 +373,9 @@ class RedisStreamWorker:
 
         try:
             if result is None:
+                # Reset tool execution tracker for this request context.
+                # This makes grounding detection independent of supervisor output_mode.
+                reset_tool_events()
                 result = await _invoke_supervisor(self.supervisor, ctx, pre.supervisor_input)
 
             # Output extraction
@@ -350,6 +394,36 @@ class RedisStreamWorker:
                         out_payload.update(audio_fields)
                 except Exception as exc:
                     logger.warning("Audio reply TTS failed; continuing with text-only | id=%s", ctx.stream_message_id, exc_info=exc)
+
+            # Deterministic memory write: only on successful supervisor outcome.
+            try:
+                status, actions, task_instructions = _extract_structured_fields(result)
+                status_norm = (status or "").strip().lower()
+                grounded = any_grounded_success(count_local_audio=False)
+                if status_norm == "success" and grounded:
+                    mem = RedisMemoryStore(self.redis_client)
+                    await mem.safe_write_success(
+                        user_id=ctx.user_id,
+                        conversation_id=ctx.conversation_id,
+                        original_text=getattr(pre, "original_text", None),
+                        english_text=getattr(pre, "english_text", None),
+                        detected_language=pre.detected_language,
+                        inbound_has_audio=pre.inbound_has_audio,
+                        reply_text=reply_text,
+                        actions=actions,
+                        task_instructions=task_instructions,
+                        reply_audio_url=out_payload.get("reply_audio_url"),
+                        write_user_event=True,
+                    )
+                else:
+                    logger.info(
+                        "Memory write skipped | id=%s | status=%s | grounded=%s",
+                        ctx.stream_message_id,
+                        status_norm or "unknown",
+                        grounded,
+                    )
+            except Exception as exc:
+                logger.warning("Memory write step failed; continuing | id=%s", ctx.stream_message_id, exc_info=exc)
 
             # Outbound publish
             outbound_publisher = RedisStreamOutboundPublisher(
