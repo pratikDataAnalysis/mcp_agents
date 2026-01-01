@@ -19,6 +19,7 @@ from typing import Dict, List
 
 from langchain_core.tools import BaseTool
 from langchain.agents import create_agent
+from langchain.agents.middleware import SummarizationMiddleware
 from src.app.config.settings import settings
 from src.app.agents.agent_definitions import AgentDefinition
 from src.app.supervisor.state import AgentTaskState
@@ -70,10 +71,23 @@ class AgentCreator:
                 agent_tools.append(TOOL_REGISTRY[tool_name])
 
             try:
+                middleware = []
+                if getattr(settings, "agent_summarization_enabled", True):
+                    summary_model_name = getattr(settings, "agent_summarization_model_name", None) or self.model_name
+                    summary_model = f"{settings.llm_provider}:{summary_model_name}"
+                    middleware.append(
+                        SummarizationMiddleware(
+                            model=summary_model,
+                            max_tokens_before_summary=int(getattr(settings, "agent_summarization_trigger_tokens", 3000) or 3000),
+                            messages_to_keep=int(getattr(settings, "agent_summarization_keep_messages", 12) or 12),
+                        )
+                    )
+
                 agent = create_agent(
                     model=f"{settings.llm_provider}:{self.model_name}",
                     tools=agent_tools,
                     system_prompt=agent_def.system_message,
+                    middleware=middleware,
                     state_schema=AgentTaskState,
                     name=agent_def.name,
                 )

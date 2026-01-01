@@ -101,6 +101,14 @@ class Settings(BaseSettings):
     memory_user_events_ttl_seconds: int = 30 * 24 * 60 * 60  # 30 days
     memory_user_events_max_items: int = 15
 
+    # Agent middleware: summarization (token control)
+    # Note: This helps prevent context growth across multi-step tool runs, but does NOT replace
+    # trimming huge tool outputs (e.g., Notion search JSON).
+    agent_summarization_enabled: bool = True
+    agent_summarization_trigger_tokens: int = 3000
+    agent_summarization_keep_messages: int = 12
+    agent_summarization_model_name: str | None = None
+
     # Notes page id
     notes_parent_page_id: str | None = None
 

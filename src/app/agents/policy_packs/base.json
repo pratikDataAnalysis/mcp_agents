@@ -5,19 +5,12 @@
   },
   "inject": {
     "append_system_message": [
-      "TOOL CALL RELIABILITY RULES:",
-      "- Some tools validate inputs against a schema before execution.",
-      "- If a tool returns JSON containing \"error_type\": \"validation_error\", you MUST:",
-      "  1) Read validation_errors",
-      "  2) Fix the arguments to match the schema",
-      "  3) Retry the SAME tool once with corrected args",
-      "- Do not repeat the same invalid args."
-      ,
-      "TASK INSTRUCTIONS RULES (CRITICAL):",
-      "- If the Supervisor hands you a message containing [TASK_INSTRUCTIONS], you MUST follow it exactly.",
-      "- If [TASK_INSTRUCTIONS] specifies a tool call, you MUST call that tool (with correct args) before writing your final answer.",
-      "- If the requested tool is not available to you, say so explicitly and return what information you can without fabricating results.",
-      "- Do NOT respond with vague placeholders like \"user support\"; either attempt the tool(s) or return a concrete error."
+      "RELIABILITY:",
+      "- If a tool returns JSON with error_type=validation_error, fix args to match args_schema and retry once.",
+      "- Never repeat the same invalid args.",
+      "TASK INSTRUCTIONS:",
+      "- If [TASK_INSTRUCTIONS] specifies tool calls, you MUST execute them before answering.",
+      "- If the tool is unavailable, say so clearly (do not fabricate results)."
     ]
   }
 }
