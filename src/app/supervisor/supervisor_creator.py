@@ -82,7 +82,7 @@ class SupervisorCreator:
             model=self.model,
             prompt=prompt,
             tools=[get_current_datetime, *custom_handoff_tools],
-            output_mode="full_history",
+            output_mode="last_message",
             response_format=SupervisorStructuredReply,
             state_schema=SupervisorTaskState,
         ).compile()

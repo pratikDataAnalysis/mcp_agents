@@ -24,12 +24,15 @@ from typing import Any, Dict, Optional
 from src.app.config.settings import settings
 from src.app.audio.media import build_media_root_path, build_public_media_url, ensure_dir, guess_mime_type_from_audio_format
 from src.app.infra.redis.client import RedisClient
+from src.app.infra.redis.memory_store import RedisMemoryStore
+from src.app.infra.redis.memory_store import MemoryContext
 from src.app.infra.redis.stream_outbound_publisher import RedisStreamOutboundPublisher
 from src.app.infra.redis.bootstrap import bootstrap_supervisor
 from src.app.logging.logger import setup_logger
 from src.app.mcp.tools.language_tools import localAudio_text_to_speech
 from src.app.runtime.pre_supervisor import prepare_for_supervisor
 from src.app.runtime.output_assembler import extract_reply_text
+from src.app.infra.tool_execution_tracker import any_grounded_success, reset_tool_events
 
 logger = setup_logger(__name__)
 
@@ -74,6 +77,68 @@ def _parse_json_dict(value: Optional[str]) -> Dict[str, Any]:
         return {}
 
 
+def _truncate(s: str, limit: int = 500) -> str:
+    s2 = (s or "").strip()
+    if len(s2) <= limit:
+        return s2
+    return s2[: max(0, limit - 3)] + "..."
+
+
+def _compact_memory_context(ctx: MemoryContext) -> Dict[str, Any]:
+    """
+    Build a compact, token-safe memory blob to inject into the supervisor envelope.
+    """
+    # Keep memory small and stable. We mainly want recent events + a couple of profile fields.
+    user_profile = ctx.user_profile if isinstance(ctx.user_profile, dict) else None
+    if isinstance(user_profile, dict):
+        user_profile = {
+            "schema": user_profile.get("schema"),
+            "user_id": user_profile.get("user_id"),
+            "last_seen_at": user_profile.get("last_seen_at"),
+            "last_detected_language": user_profile.get("last_detected_language"),
+            "reply_in_audio_when_inbound_audio": user_profile.get("reply_in_audio_when_inbound_audio"),
+        }
+
+    max_events = 5
+    events_out = []
+    for e in (ctx.recent_events or [])[:max_events]:
+        if not isinstance(e, dict):
+            continue
+        events_out.append(
+            {
+                "ts": e.get("ts"),
+                "conversation_id": e.get("conversation_id"),
+                "original_text": _truncate(str(e.get("original_text") or "")),
+                "english_text": _truncate(str(e.get("english_text") or "")),
+                "reply_text": _truncate(str(e.get("reply_text") or "")),
+                "actions": e.get("actions") if isinstance(e.get("actions"), list) else [],
+            }
+        )
+
+    return {
+        "user_profile": user_profile,
+        "recent_events": events_out,
+    }
+
+
+def _inject_memory_into_envelope(supervisor_input: str, memory_context: Dict[str, Any]) -> str:
+    """
+    Inject memory_context into the INPUT_ENVELOPE_JSON payload so the supervisor can route without a memory tool call.
+    """
+    prefix = "INPUT_ENVELOPE_JSON:\n"
+    if not supervisor_input.startswith(prefix):
+        return supervisor_input
+    raw = supervisor_input[len(prefix) :].strip()
+    try:
+        envelope = json.loads(raw)
+    except Exception:
+        return supervisor_input
+    if not isinstance(envelope, dict):
+        return supervisor_input
+    envelope["memory_context"] = memory_context
+    return prefix + json.dumps(envelope, ensure_ascii=False) + "\n"
+
+
 def _build_inbound_context(stream_message_id: str, payload: Dict[str, str]) -> InboundContext:
     """
     Normalize raw Redis stream payload fields into a strongly typed context object.
@@ -111,7 +176,11 @@ async def _invoke_supervisor(supervisor: Any, ctx: InboundContext, text: str) ->
     # - thread_id groups traces per conversation
     # - metadata provides quick filters/search
     config = {
-        "configurable": {"thread_id": ctx.conversation_id},
+        "configurable": {
+            "thread_id": ctx.conversation_id,
+            "conversation_id": ctx.conversation_id,
+            "user_id": ctx.user_id,
+        },
         "tags": [ctx.source],
         "metadata": {
             "stream_message_id": ctx.stream_message_id,
@@ -126,6 +195,41 @@ async def _invoke_supervisor(supervisor: Any, ctx: InboundContext, text: str) ->
     logger.info("Supervisor done | id=%s | supervisor_ainvoke_s=%.3f", ctx.stream_message_id, (t_sup_end - t_sup_start))
     logger.info("Supervisor result | id=%s | result=%s", ctx.stream_message_id, result)
     return result
+
+
+def _extract_structured_fields(result: Any) -> tuple[Optional[str], list[str], Optional[str]]:
+    """
+    Extract (status, actions, task_instructions) from supervisor result if present.
+    """
+    status: Optional[str] = None
+    actions: list[str] = []
+    task_instructions: Optional[str] = None
+
+    if isinstance(result, dict):
+        ti = result.get("task_instructions")
+        if isinstance(ti, str) and ti.strip():
+            task_instructions = ti.strip()
+
+        sr = result.get("structured_response")
+
+        # Pydantic-like object
+        st = getattr(sr, "status", None)
+        if isinstance(st, str) and st.strip():
+            status = st.strip()
+        acts = getattr(sr, "actions", None)
+        if isinstance(acts, list):
+            actions = [str(x) for x in acts if str(x).strip()]
+
+        # Dict-like
+        if isinstance(sr, dict):
+            st2 = sr.get("status")
+            if isinstance(st2, str) and st2.strip():
+                status = st2.strip()
+            acts2 = sr.get("actions")
+            if isinstance(acts2, list):
+                actions = [str(x) for x in acts2 if str(x).strip()]
+
+    return status, actions, task_instructions
 
 
 def _build_outbound_payload(ctx: InboundContext, reply_text: str) -> Dict[str, str]:
@@ -332,7 +436,22 @@ class RedisStreamWorker:
 
         try:
             if result is None:
-                result = await _invoke_supervisor(self.supervisor, ctx, pre.supervisor_input)
+                # Reset tool execution tracker for this request context.
+                # This makes grounding detection independent of supervisor output_mode.
+                reset_tool_events()
+                # Prefetch memory in worker to avoid an extra supervisor model call (memory_get_context).
+                try:
+                    mem = RedisMemoryStore(self.redis_client)
+                    mem_ctx = await mem.get_context(user_id=ctx.user_id, conversation_id=ctx.conversation_id)
+                    supervisor_input = _inject_memory_into_envelope(
+                        pre.supervisor_input,
+                        _compact_memory_context(mem_ctx),
+                    )
+                except Exception as exc:
+                    logger.warning("Memory prefetch failed; continuing without memory_context | id=%s", ctx.stream_message_id, exc_info=exc)
+                    supervisor_input = pre.supervisor_input
+
+                result = await _invoke_supervisor(self.supervisor, ctx, supervisor_input)
 
             # Output extraction
             t_extract_start = time.perf_counter()
@@ -350,6 +469,36 @@ class RedisStreamWorker:
                         out_payload.update(audio_fields)
                 except Exception as exc:
                     logger.warning("Audio reply TTS failed; continuing with text-only | id=%s", ctx.stream_message_id, exc_info=exc)
+
+            # Deterministic memory write: only on successful supervisor outcome.
+            try:
+                status, actions, task_instructions = _extract_structured_fields(result)
+                status_norm = (status or "").strip().lower()
+                grounded = any_grounded_success(count_local_audio=False)
+                if status_norm == "success" and grounded:
+                    mem = RedisMemoryStore(self.redis_client)
+                    await mem.safe_write_success(
+                        user_id=ctx.user_id,
+                        conversation_id=ctx.conversation_id,
+                        original_text=getattr(pre, "original_text", None),
+                        english_text=getattr(pre, "english_text", None),
+                        detected_language=pre.detected_language,
+                        inbound_has_audio=pre.inbound_has_audio,
+                        reply_text=reply_text,
+                        actions=actions,
+                        task_instructions=task_instructions,
+                        reply_audio_url=out_payload.get("reply_audio_url"),
+                        write_user_event=True,
+                    )
+                else:
+                    logger.info(
+                        "Memory write skipped | id=%s | status=%s | grounded=%s",
+                        ctx.stream_message_id,
+                        status_norm or "unknown",
+                        grounded,
+                    )
+            except Exception as exc:
+                logger.warning("Memory write step failed; continuing | id=%s", ctx.stream_message_id, exc_info=exc)
 
             # Outbound publish
             outbound_publisher = RedisStreamOutboundPublisher(
