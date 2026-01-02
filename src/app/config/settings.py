@@ -109,6 +109,11 @@ class Settings(BaseSettings):
     agent_summarization_keep_messages: int = 12
     agent_summarization_model_name: str | None = None
 
+    # Tool output trimming (token control)
+    tool_output_trimming_enabled: bool = True
+    tool_trim_notion_max_items: int = 5
+    tool_trim_notion_max_chars: int = 4000
+
     # Notes page id
     notes_parent_page_id: str | None = None
 

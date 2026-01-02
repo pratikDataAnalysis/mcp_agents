@@ -22,6 +22,7 @@ from src.app.infra.tool_validation.notion_http import (
 )
 from src.app.infra.tool_validation.registry import get_validator
 from src.app.infra.tool_execution_tracker import record_tool_result
+from src.app.infra.tool_output_trimmer import maybe_trim_tool_output
 from src.app.logging.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -132,6 +133,8 @@ class ValidatingTool(BaseTool):
             log_normalized_notion_error(self.name, normalized)
             record_tool_result(name=self.name, result=normalized)
             return normalized
+        # Trim heavy tool outputs (e.g., Notion search JSON) before it becomes a ToolMessage for the model.
+        result = maybe_trim_tool_output(tool_name=self.name, tool_args=norm_kwargs, result=result)
         record_tool_result(name=self.name, result=result)
         return result
 
@@ -151,6 +154,8 @@ class ValidatingTool(BaseTool):
             log_normalized_notion_error(self.name, normalized)
             record_tool_result(name=self.name, result=normalized)
             return normalized
+        # Trim heavy tool outputs (e.g., Notion search JSON) before it becomes a ToolMessage for the model.
+        result = maybe_trim_tool_output(tool_name=self.name, tool_args=norm_kwargs, result=result)
         record_tool_result(name=self.name, result=result)
         return result
 
