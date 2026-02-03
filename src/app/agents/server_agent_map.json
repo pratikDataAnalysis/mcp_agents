@@ -67,6 +67,34 @@
           ]
         }
       ]
+    },
+    "excelAnalysis": {
+      "blacklisted_tools": [],
+      "agents": [
+        {
+          "name": "excel_analyzer",
+          "responsibility": "Read, search, and analyze Excel spreadsheet data. Handles .xlsx and .xls files.",
+          "tools": [
+            "excelAnalysis_read_file",
+            "excelAnalysis_search_content",
+            "excelAnalysis_analyze_data"
+          ]
+        }
+      ]
+    },
+    "indianDishes": {
+      "blacklisted_tools": [],
+      "agents": [
+        {
+          "name": "chef",
+          "responsibility": "Suggest Indian dish recipes and meals based on user preferences. Searches 6000+ Indian dishes database, provides recipe details, and makes personalized recommendations.",
+          "tools": [
+            "indianDishes_search",
+            "indianDishes_get_recipe",
+            "indianDishes_analyze_database"
+          ]
+        }
+      ]
     }
   }
 }

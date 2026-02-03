@@ -47,3 +47,10 @@ redis==7.1.0
 
 # SSL CA bundle for urllib on some systems (macOS/Homebrew Python)
 certifi==2025.8.3
+
+# -----------------------------
+# Excel Analysis (Agent Skill)
+# -----------------------------
+pandas>=2.2.3
+openpyxl>=3.1.5
+xlrd>=2.0.1

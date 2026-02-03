@@ -36,3 +36,6 @@ data/
 
 # Redis
 *.rdb
+# Large data files
+*.xlsx
+*.xls

@@ -12,6 +12,8 @@ from typing import List
 from langchain_core.tools import BaseTool
 
 from src.app.mcp.tools.language_tools import get_language_tools
+from src.app.mcp.tools.excel_tools import get_excel_tools
+from src.app.mcp.tools.chef_tools import get_chef_tools
 
 
 def get_local_tools() -> List[BaseTool]:
@@ -20,6 +22,8 @@ def get_local_tools() -> List[BaseTool]:
     """
     tools: List[BaseTool] = []
     tools.extend(get_language_tools())
+    tools.extend(get_excel_tools())
+    tools.extend(get_chef_tools())
     return tools
 
 
