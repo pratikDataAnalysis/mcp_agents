@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Notion-Play** is a multi-agent AI system that receives WhatsApp messages via Twilio, routes them through a LangGraph Supervisor, executes actions via MCP servers (Notion, Zoom, etc.), and replies back over WhatsApp. Redis Streams serve as the async message bus between three independent processes.
+**MCP-Multi-Agents-System** is a multi-agent AI system that receives WhatsApp messages via Twilio, routes them through a LangGraph Supervisor, executes actions via MCP servers (Notion, Zoom, etc.), and replies back over WhatsApp. Redis Streams serve as the async message bus between three independent processes.
 
 ---
 

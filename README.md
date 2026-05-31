@@ -1,4 +1,4 @@
-# Notion-Play: WhatsApp + MCP Supervisor Agent Platform
+# Multi-Agent: WhatsApp + MCP Supervisor Agent Platform
 
 A multi-agent AI system that receives WhatsApp messages via Twilio, routes them through a Supervisor Agent (LangGraph/LangChain), and executes actions via MCP servers (starting with Notion MCP).
 
